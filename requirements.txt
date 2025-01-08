@@ -8,3 +8,4 @@ plotly
 requests
 python-multipart
 tensorflow
+scipy
