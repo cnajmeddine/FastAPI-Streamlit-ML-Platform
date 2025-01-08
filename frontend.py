@@ -2,17 +2,25 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
+import plotly.figure_factory as ff
 from typing import List
 import json
 
 # Constants
 API_URL = "http://localhost:8000"
-AVAILABLE_MODELS = ["sentiment-analysis"]  # Add more models as needed
+AVAILABLE_MODELS = ["sentiment-analysis"]
+
+def format_bytes(size):
+    """Format bytes to human readable string"""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size < 1024.0:
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+    return f"{size:.2f} TB"
 
 def main():
     st.title("ML Platform MVP")
     
-    # Sidebar for model selection
     with st.sidebar:
         st.header("Model Selection")
         selected_model = st.selectbox(
@@ -20,11 +28,9 @@ def main():
             options=AVAILABLE_MODELS
         )
     
-    # Main content area
     uploaded_file = st.file_uploader("Upload your dataset (CSV)", type="csv")
     
     if uploaded_file:
-        # Upload dataset to backend
         files = {"file": uploaded_file}
         response = requests.post(f"{API_URL}/upload", files=files)
         
@@ -32,7 +38,7 @@ def main():
             data_preview = response.json()
             
             # Display data preview
-            st.subheader("Data Preview")
+            st.header("Data Preview")
             preview_df = pd.DataFrame(data_preview["preview_rows"])
             st.dataframe(preview_df)
             
@@ -40,48 +46,131 @@ def main():
             tab1, tab2 = st.tabs(["Exploratory Data Analysis", "Predictions"])
             
             with tab1:
-                st.subheader("Exploratory Data Analysis")
+                st.header("Exploratory Data Analysis")
                 
                 # Fetch EDA results
                 eda_response = requests.get(f"{API_URL}/eda/{uploaded_file.name}")
                 if eda_response.status_code == 200:
                     eda_results = eda_response.json()
                     
-                    # Display summary statistics
-                    st.write("### Summary Statistics")
-                    summary_df = pd.DataFrame(eda_results["summary"])
-                    st.dataframe(summary_df)
+                    # Basic Information
+                    st.subheader("Basic DataFrame Information")
+                    basic_info = eda_results["basic_info"]
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Rows", basic_info["rows"])
+                    with col2:
+                        st.metric("Columns", basic_info["columns"])
+                    with col3:
+                        st.metric("Total Cells", basic_info["total_cells"])
                     
-                    # Display missing values
-                    st.write("### Missing Values")
-                    missing_df = pd.DataFrame.from_dict(
-                        eda_results["missing_values"], 
-                        orient='index', 
-                        columns=['Count']
+                    st.metric("Memory Usage", format_bytes(basic_info["memory_usage"]))
+                    
+                    # Data Types
+                    st.write("#### Data Types Distribution")
+                    for dtype, count in basic_info["dtypes"].items():
+                        st.write(f"- {dtype}: {count} columns")
+                    
+                    # Missing Values Analysis
+                    st.subheader("Missing Values Analysis")
+                    missing = eda_results["missing_analysis"]
+                    st.metric(
+                        "Total Missing Values", 
+                        missing["total_missing"],
+                        f"{missing['total_missing_percentage']:.2f}%"
                     )
-                    st.dataframe(missing_df)
                     
-                    # Create visualizations
-                    numeric_cols = [
-                        col for col, dtype in eda_results["column_types"].items()
-                        if "float" in dtype or "int" in dtype
-                    ]
+                    # Missing values by column
+                    missing_df = pd.DataFrame([
+                        {
+                            "Column": col,
+                            "Missing Count": info["count"],
+                            "Missing Percentage": f"{info['percentage']:.2f}%"
+                        }
+                        for col, info in missing["missing_by_column"].items()
+                        if info["count"] > 0
+                    ])
+                    if not missing_df.empty:
+                        st.write("#### Missing Values by Column")
+                        st.dataframe(missing_df)
                     
+                    # Column Analysis
+                    st.subheader("Column Analysis")
+                    
+                    # Group columns by type
+                    column_analysis = eda_results["column_analysis"]
+                    numeric_cols = [col for col, info in column_analysis.items() 
+                                  if info["type"] == "numeric"]
+                    categorical_cols = [col for col, info in column_analysis.items() 
+                                     if info["type"] == "categorical"]
+                    datetime_cols = [col for col, info in column_analysis.items() 
+                                   if info["type"] == "datetime"]
+                    
+                    # Numeric Columns
                     if numeric_cols:
-                        selected_col = st.selectbox(
-                            "Select column for distribution plot",
+                        st.write("#### Numeric Columns")
+                        selected_num_col = st.selectbox(
+                            "Select numeric column",
                             options=numeric_cols
                         )
+                        col_info = column_analysis[selected_num_col]
                         
-                        # Create distribution plot using plotly
-                        df = pd.read_csv(uploaded_file)
-                        fig = px.histogram(df, x=selected_col)
-                        st.plotly_chart(fig)
+                        # Display statistics
+                        st.write("Statistics:")
+                        stats_df = pd.DataFrame([col_info["stats"]])
+                        st.dataframe(stats_df)
+                        
+                        # Display outliers
+                        st.write("Outliers:")
+                        outliers = col_info["outliers"]
+                        st.write(f"- Count: {outliers['count']}")
+                        st.write(f"- Percentage: {outliers['percentage']:.2f}%")
+                        st.write(f"- Range: {outliers['lower_bound']:.2f} to {outliers['upper_bound']:.2f}")
+                    
+                    # Categorical Columns
+                    if categorical_cols:
+                        st.write("#### Categorical Columns")
+                        selected_cat_col = st.selectbox(
+                            "Select categorical column",
+                            options=categorical_cols
+                        )
+                        col_info = column_analysis[selected_cat_col]
+                        
+                        st.write(f"Unique Values: {col_info['unique_count']}")
+                        st.write("Top 5 Values:")
+                        for value, info in col_info["top_values"].items():
+                            st.write(f"- {value}: {info['count']} ({info['percentage']:.2f}%)")
+                    
+                    # Datetime Columns
+                    if datetime_cols:
+                        st.write("#### Datetime Columns")
+                        selected_dt_col = st.selectbox(
+                            "Select datetime column",
+                            options=datetime_cols
+                        )
+                        col_info = column_analysis[selected_dt_col]
+                        
+                        st.write(f"Range: {col_info['min']} to {col_info['max']}")
+                        st.write(f"Total Days: {col_info['range_days']}")
+                    
+                    # Duplicate Analysis
+                    st.subheader("Duplicate Analysis")
+                    dupes = eda_results["duplicate_analysis"]
+                    st.write("#### Duplicate Rows")
+                    st.metric(
+                        "Count",
+                        dupes["rows"]["count"],
+                        f"{dupes['rows']['percentage']:.2f}%"
+                    )
+                    
+                    if dupes["columns"]["count"] > 0:
+                        st.write("#### Duplicate Columns")
+                        st.write(f"Count: {dupes['columns']['count']}")
+                        st.write("Columns:", ", ".join(dupes["columns"]["names"]))
             
             with tab2:
                 st.subheader("Model Predictions")
                 
-                # For text-based models
                 if selected_model == "sentiment-analysis":
                     text_input = st.text_area(
                         "Enter text for prediction (one per line)"
