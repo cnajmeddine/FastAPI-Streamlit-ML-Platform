@@ -73,7 +73,7 @@ def main():
                     
                     # Missing Values Analysis
                     st.subheader("Missing Values Analysis")
-                    missing = eda_results["missing_analysis"]
+                    missing = eda_results["null_analysis"]
                     st.metric(
                         "Total Missing Values", 
                         missing["total_missing"],
@@ -84,11 +84,11 @@ def main():
                     missing_df = pd.DataFrame([
                         {
                             "Column": col,
-                            "Missing Count": info["count"],
-                            "Missing Percentage": f"{info['percentage']:.2f}%"
+                            "Missing Count": info["null_count"],
+                            "Missing Percentage": f"{info['null_percentage']:.2f}%"
                         }
-                        for col, info in missing["missing_by_column"].items()
-                        if info["count"] > 0
+                        for col, info in missing["columns"].items()
+                        if info["null_count"] > 0
                     ])
                     if not missing_df.empty:
                         st.write("#### Missing Values by Column")
@@ -126,6 +126,10 @@ def main():
                         st.write(f"- Count: {outliers['count']}")
                         st.write(f"- Percentage: {outliers['percentage']:.2f}%")
                         st.write(f"- Range: {outliers['lower_bound']:.2f} to {outliers['upper_bound']:.2f}")
+                        
+                        # Display unique values
+                        if 'value_analysis' in col_info:
+                            st.write(f"Unique Values: {col_info['value_analysis']['unique_count']}")
                     
                     # Categorical Columns
                     if categorical_cols:
@@ -136,10 +140,11 @@ def main():
                         )
                         col_info = column_analysis[selected_cat_col]
                         
-                        st.write(f"Unique Values: {col_info['unique_count']}")
-                        st.write("Top 5 Values:")
-                        for value, info in col_info["top_values"].items():
-                            st.write(f"- {value}: {info['count']} ({info['percentage']:.2f}%)")
+                        if 'value_analysis' in col_info:
+                            st.write(f"Unique Values: {col_info['value_analysis']['unique_count']}")
+                            st.write("Top 5 Values:")
+                            for value, info in col_info["value_analysis"]["top_values"].items():
+                                st.write(f"- {value}: {info['count']} ({info['percentage']:.2f}%)")
                     
                     # Datetime Columns
                     if datetime_cols:
