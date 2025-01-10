@@ -43,7 +43,7 @@ def main():
             st.dataframe(preview_df)
             
             # Tabs for EDA and Predictions
-            tab1, tab2 = st.tabs(["Exploratory Data Analysis", "Predictions"])
+            tab1, tab2 = st.tabs(["Exploratory Data Analysis", "Sentiment analysis"])
             
             with tab1:
                 st.header("Exploratory Data Analysis")
