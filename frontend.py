@@ -178,7 +178,7 @@ def main():
                 
                 if selected_model == "sentiment-analysis":
                     text_input = st.text_area(
-                        "Enter text for prediction (one per line)"
+                        "Enter text for prediction"
                     )
                     
                     if st.button("Run Prediction"):
